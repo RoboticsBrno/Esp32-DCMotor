@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 
@@ -125,8 +126,24 @@ class DCMotor {
     const ledc_channel_t _channelA;
     const ledc_channel_t _channelB;
 
-    std::atomic<int> _speed;
-    std::atomic<int64_t> _targetPos; // ticks * 1024
+    std::atomic<int> _maxSpeed;
+
+    std::atomic<int64_t> _actualTargetPos;  // ticks * 1024
+
+    std::atomic<int64_t> _endTargetPos;  // ticks * 1024°
+    std::atomic<int64_t> _endTargetTime;  // ms
+    std::atomic<bool> _reachedPos = false;
+
+    std::function<void()> _onTarget;
+
+    enum Mode {
+        INFINITE,
+        TIME,
+        POSITION,
+        FREE,
+        BREAK
+    };
+    Mode mode = FREE;
 
     void setOutput(int power) {
         if (power < 0) {
@@ -141,9 +158,15 @@ class DCMotor {
         ledc_update_duty(LEDC_LOW_SPEED_MODE, _channelB);
     }
 
+    void callHandler() {
+        if (_onTarget) {
+            _onTarget();
+        }
+    }
+
 public:
     DCMotor(gpio_num_t motA, gpio_num_t motB, gpio_num_t encA, gpio_num_t encB, int regP, ledc_timer_t timer, ledc_channel_t channelA, ledc_channel_t channelB):
-        _enc(encA, encB), _regP(regP), _channelA(channelA), _channelB(channelB), _speed(0), _targetPos(0)
+        _enc(encA, encB), _regP(regP), _channelA(channelA), _channelB(channelB), _maxSpeed(0), _actualTargetPos(0)
     {
         ledc_channel_config_t confA = {
             .gpio_num = motA,
@@ -178,25 +201,86 @@ public:
     DCMotor(DCMotor&&) = delete;
     DCMotor& operator=(DCMotor&&) = delete;
 
-    int tick() {
+    void tick() {
+        if (mode == BREAK || mode == FREE) {
+            return;
+        }
+        if (mode == TIME && esp_timer_get_time() > _endTargetTime) {
+            stop(true);
+            callHandler();
+            return;
+        }
+
         int64_t pos = _enc.getPos() << 10;
-        int64_t error = (_targetPos - pos);
+        if (mode == TIME || mode == INFINITE) {
+            _actualTargetPos += _maxSpeed;
+        }
+        else if (mode == POSITION) {
+            int absSpeed = std::abs(_maxSpeed);
+            int actualSpeed = std::clamp((_endTargetPos - pos) >> 8, static_cast<int64_t>(-absSpeed), static_cast<int64_t>(absSpeed));
+            _actualTargetPos += actualSpeed;
+            if (!_reachedPos && std::abs(_endTargetPos - pos) < 256) {
+                _reachedPos = true;
+                callHandler();
+            }
+        }
+
+        int64_t error = (_actualTargetPos - pos);
         error = error * _regP >> 10;
         int power = std::clamp(error, static_cast<int64_t>(-1024), static_cast<int64_t>(1024));
-        return power;
+
+        setOutput(power);
     }
 
     // ticks/second
     void setSpeed(int speed) {
-        _speed = speed;
+        _maxSpeed = speed;
+    }
+
+    void moveInfinite() {
+        mode = INFINITE;
+        _actualTargetPos = _enc.getPos() << 10;
+    }
+
+    void moveTime(int64_t time) {
+        mode = TIME;
+        _actualTargetPos = _enc.getPos() << 10;
+        _endTargetTime = esp_timer_get_time() + time * 1000;
+    }
+
+    void moveDistance(int64_t delta) {
+        mode = POSITION;
+        _actualTargetPos = _enc.getPos() << 10;
+        _endTargetPos = _actualTargetPos + (delta << 10);
+        _reachedPos = false;
+    }
+
+    void stop(bool break_) {
+        _endTargetPos = _enc.getPos() << 10;
+        _actualTargetPos = _endTargetPos.load();
+
+        mode = break_ ? BREAK : FREE;
+        if (break_) {
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, _channelA, 1024);
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, _channelB, 1024);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, _channelA);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, _channelB);
+        }
+        else {
+            setOutput(0);
+        }
+    }
+
+    // called in interrupt context, must not call onTarget from callback
+    void onTarget(std::function<void()> callback) {
+        _onTarget = callback;
     }
 
     void startTicker() {
         esp_timer_create_args_t tmrArgs = {
             .callback = [](void* arg) {
                 auto& motor = *static_cast<DCMotor*>(arg);
-                motor._targetPos += motor._speed;
-                motor.setOutput(motor.tick());
+                motor.tick();
             },
             .arg = this,
             .dispatch_method = ESP_TIMER_ISR,
