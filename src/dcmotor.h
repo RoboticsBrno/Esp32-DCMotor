@@ -175,7 +175,8 @@ public:
             .intr_type = LEDC_INTR_DISABLE,
             .timer_sel = timer,
             .duty = 0,
-            .hpoint = 0
+            .hpoint = 0,
+            .flags = { 0 }
         };
         ledc_channel_config(&confA);
 
@@ -186,7 +187,8 @@ public:
             .intr_type = LEDC_INTR_DISABLE,
             .timer_sel = timer,
             .duty = 0,
-            .hpoint = 0
+            .hpoint = 0,
+            .flags = { 0 }
         };
         ledc_channel_config(&confB);
     }
@@ -255,12 +257,12 @@ public:
         _reachedPos = false;
     }
 
-    void stop(bool break_) {
+    void stop(bool brake) {
         _endTargetPos = _enc.getPos() << 10;
         _actualTargetPos = _endTargetPos.load();
 
-        mode = break_ ? BREAK : FREE;
-        if (break_) {
+        mode = brake ? BREAK : FREE;
+        if (brake) {
             ledc_set_duty(LEDC_LOW_SPEED_MODE, _channelA, 1024);
             ledc_set_duty(LEDC_LOW_SPEED_MODE, _channelB, 1024);
             ledc_update_duty(LEDC_LOW_SPEED_MODE, _channelA);
@@ -276,6 +278,8 @@ public:
         _onTarget = callback;
     }
 
+    esp_timer_handle_t _tmr;
+
     void startTicker() {
         esp_timer_create_args_t tmrArgs = {
             .callback = [](void* arg) {
@@ -287,9 +291,14 @@ public:
             .name = "DCMotorTick",
             .skip_unhandled_events = true
         };
-        esp_timer_handle_t tmr;
-        esp_timer_create(&tmrArgs, &tmr);
-        esp_timer_start_periodic(tmr, 1024);
+
+        esp_timer_create(&tmrArgs, &_tmr);
+        esp_timer_start_periodic(_tmr, 1024);
+    }
+
+    void stopTicker() {
+        esp_timer_stop(_tmr);
+        esp_timer_delete(_tmr);
     }
 
     int64_t getPosition() {
