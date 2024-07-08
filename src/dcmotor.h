@@ -102,7 +102,9 @@ public:
         if (_channel) {
             pcnt_del_channel(_channel);
         }
+
         if (_unit) {
+            pcnt_unit_disable(_unit);
             pcnt_del_unit(_unit);
         }
     }
