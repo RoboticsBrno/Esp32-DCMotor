@@ -134,7 +134,7 @@ class DCMotor {
 
     std::atomic<int64_t> _endTargetPos;  // ticks * 1024
     std::atomic<int64_t> _endTargetTime;  // ms
-    std::atomic<bool> _reachedPos = false;
+    std::atomic<bool> _handled = false;
     std::atomic<unsigned> _endPosTolerance = 1 << 10;
 
     std::function<void()> _onTarget;
@@ -162,6 +162,7 @@ class DCMotor {
     }
 
     void callHandler() {
+        _handled = true;
         if (_onTarget) {
             _onTarget();
         }
@@ -224,8 +225,7 @@ public:
             int absSpeed = std::abs(_maxSpeed);
             int actualSpeed = std::clamp((_endTargetPos - pos) >> 8, static_cast<int64_t>(-absSpeed), static_cast<int64_t>(absSpeed));
             _actualTargetPos += actualSpeed;
-            if (!_reachedPos && std::abs(_endTargetPos - pos) < _endPosTolerance) {
-                _reachedPos = true;
+            if (!_handled && std::abs(_endTargetPos - pos) < _endPosTolerance) {
                 callHandler();
             }
         }
@@ -249,19 +249,21 @@ public:
     void moveInfinite() {
         mode = INFINITE;
         _actualTargetPos = _enc.getPos() << 10;
+        _handled = false;
     }
 
     void moveTime(int64_t time) {
         mode = TIME;
         _actualTargetPos = _enc.getPos() << 10;
         _endTargetTime = esp_timer_get_time() + time * 1000;
+        _handled = false;
     }
 
     void moveDistance(int64_t delta) {
         mode = POSITION;
         _actualTargetPos = _enc.getPos() << 10;
         _endTargetPos = _actualTargetPos + (delta << 10);
-        _reachedPos = false;
+        _handled = false;
     }
 
     void stop(bool brake) {
@@ -277,6 +279,10 @@ public:
         }
         else {
             setOutput(0);
+        }
+
+        if (!_handled) {
+            callHandler();
         }
     }
 
