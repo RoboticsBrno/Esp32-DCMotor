@@ -293,14 +293,14 @@ public:
 
     esp_timer_handle_t _tmr;
 
-    void startTicker() {
+    void startTicker(esp_timer_dispatch_t dispatchMethod = ESP_TIMER_TASK) {
         esp_timer_create_args_t tmrArgs = {
             .callback = [](void* arg) {
                 auto& motor = *static_cast<DCMotor*>(arg);
                 motor.tick();
             },
             .arg = this,
-            .dispatch_method = ESP_TIMER_ISR,
+            .dispatch_method = dispatchMethod,
             .name = "DCMotorTick",
             .skip_unhandled_events = true
         };
@@ -318,3 +318,89 @@ public:
         return _enc.getPos();
     }
 };
+
+
+/*
+class MotorManager;
+class DCMotor;
+
+struct MotorManagerHandle {
+    std::shared_ptr<MotorManager> manager;
+    DCMotor* motor;
+
+    MotorManagerHandle(std::shared_ptr<MotorManager> manager, DCMotor* motor):
+        manager(manager), motor(motor)
+    {}
+
+    ~MotorManagerHandle();
+};
+
+class MotorManager {
+    static std::weak_ptr<MotorManager> instance;
+
+    MotorManager() {
+        ledc_timer_config_t timer_conf = {
+            .speed_mode = LEDC_LOW_SPEED_MODE,
+            .duty_resolution = LEDC_TIMER_10_BIT,
+            .timer_num = LEDC_TIMER_0,
+            .freq_hz = 50000,
+            .clk_cfg = LEDC_AUTO_CLK,
+            .deconfigure = false
+        };
+        ledc_timer_config(&timer_conf);
+    }
+
+    static void tmrISR(void* arg) {
+        if (auto inst = instance.lock()) {
+            inst->tick();
+        }
+    }
+
+public:
+    static std::shared_ptr<MotorManager> getInstance() {
+        auto inst = instance.lock();
+        if (!inst) {
+            instance = inst = std::shared_ptr<MotorManager>(new MotorManager());
+        }
+        return inst;
+    }
+
+    MotorManager(const MotorManager&) = delete;
+    MotorManager& operator=(const MotorManager&) = delete;
+    MotorManager(MotorManager&&) = delete;
+    MotorManager& operator=(MotorManager&&) = delete;
+
+    ~MotorManager() {
+        ledc_timer_rst(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0);
+    }
+
+    std::vector<DCMotor*> motors;
+
+    std::unique_ptr<DCMotor> newMotor(gpio_num_t pinA, gpio_num_t pinB, gpio_num_t encA, gpio_num_t encB, int regP) {
+        auto enc = std::make_unique<TickEncoder>(encA, encB);
+        auto motor = std::make_unique<DCMotor>(pinA, pinB, *enc, regP);
+        motors.push_back(motor.get());
+    }
+
+    void removeMotor(DCMotor* motor) {
+        auto it = std::find(motors.begin(), motors.end(), motor);
+        if (it != motors.end()) {
+            motors.erase(it);
+        }
+    }
+
+    void tick() {
+        for (auto motor : motors) {
+            motor->tick();
+        }
+    }
+};
+
+
+
+
+MotorManagerHandle::~MotorManagerHandle() {
+    manager->removeMotor(motor);
+}
+
+*/
