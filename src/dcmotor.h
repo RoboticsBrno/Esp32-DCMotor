@@ -132,9 +132,10 @@ class DCMotor {
 
     std::atomic<int64_t> _actualTargetPos;  // ticks * 1024
 
-    std::atomic<int64_t> _endTargetPos;  // ticks * 1024°
+    std::atomic<int64_t> _endTargetPos;  // ticks * 1024
     std::atomic<int64_t> _endTargetTime;  // ms
     std::atomic<bool> _reachedPos = false;
+    std::atomic<unsigned> _endPosTolerance = 1 << 10;
 
     std::function<void()> _onTarget;
 
@@ -223,7 +224,7 @@ public:
             int absSpeed = std::abs(_maxSpeed);
             int actualSpeed = std::clamp((_endTargetPos - pos) >> 8, static_cast<int64_t>(-absSpeed), static_cast<int64_t>(absSpeed));
             _actualTargetPos += actualSpeed;
-            if (!_reachedPos && std::abs(_endTargetPos - pos) < 256) {
+            if (!_reachedPos && std::abs(_endTargetPos - pos) < _endPosTolerance) {
                 _reachedPos = true;
                 callHandler();
             }
@@ -239,6 +240,10 @@ public:
     // ticks/second
     void setSpeed(int speed) {
         _maxSpeed = speed;
+    }
+
+    void setEndPosTolerance(unsigned tolerance) {
+        _endPosTolerance = tolerance << 10;
     }
 
     void moveInfinite() {
