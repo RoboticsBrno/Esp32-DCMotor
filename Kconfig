@@ -1,0 +1,26 @@
+menu "DCMotor"
+    config DCMOTOR_CONTROL_FREQ_EXP
+        int "Specifies the frequency of the control loop (freq = 2^n ms)"
+        default 10
+    config DCMOTOR_FILTER_EXP
+        int "Specifies the exponent for filter coefficient (2^(-n))"
+        default 10
+    config DCMOTOR_FILTER_COEFF
+        int "Specifies the filter coefficient (used for filtering error and its derivative)"
+        default 922
+    config DCMOTOR_KP_EXP
+        int "Specifies the exponent for proportional gain (2^(-n))"
+        default 10
+    config DCMOTOR_KI_EXP
+        int "Specifies the exponent for integral gain (2^(-n))"
+        default 2
+    config DCMOTOR_KD_EXP
+        int "Specifies the exponent for derivative gain (2^(-n))"
+        default 10
+    config DCMOTOR_KV_EXP
+        int "Specifies the exponent for velocity gain (2^(-n))"
+        default 10
+    config DCMOTOR_KA_EXP
+        int "Specifies the exponent for acceleration gain (2^(-n))"
+        default 20
+endmenu
