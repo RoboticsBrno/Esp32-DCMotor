@@ -1,4 +1,4 @@
-version: "0.0.2"
+version: "1.0.0"
 description: "A simple library to control a DC motor with a DRV8833 driver and a quadrature encoder using an ESP32."
 dependencies:
   idf: ">=5.1"
