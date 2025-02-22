@@ -1,0 +1,7 @@
+0:    freq 20000
+0:    reg l 5120 350 350 170 7000 35 1023 2
+0:    speed l 1500
+0:    ramp l 3000
+0:    report l e
+100:  move_d l 3000
+3500: report l d
