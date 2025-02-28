@@ -401,7 +401,7 @@ class DCMotor {
                 st.vwPos += st.vwSpeed >> TMR_FREQ_EXP;
             }
 
-            if (!st.handled && st.vwSpeed == 0 && std::abs(static_cast<int64_t>((st.endTargetPos >> TMR_FREQ_EXP) - pos)) < _endPosTolerance) {
+            if (!st.handled && st.vwSpeed == 0 && std::abs((static_cast<int64_t>(st.endTargetPos) >> TMR_FREQ_EXP) - pos) < _endPosTolerance) {
                 callHandler();
             }
         }
